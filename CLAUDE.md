@@ -3,6 +3,11 @@
 ## Project Overview
 텔레그램 봇을 통해 WSL2의 Claude Code를 원격 제어하는 시스템입니다.
 
+## Development Environment
+- **OS**: Windows (WSL2 배포 대상)
+- **Build Tool**: Gradle
+- **Package**: `kr.yonggeon.claudebot`
+
 ## Tech Stack
 - **Framework**: Spring Boot 3.5.0
 - **Language**: Java 21 LTS
@@ -98,8 +103,11 @@ export TELEGRAM_BOT_USERNAME=your_bot_username
 export DB_USERNAME=root
 export DB_PASSWORD=password
 
-# Run with dev profile
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
+# Run with dev profile (Gradle)
+./gradlew bootRun --args='--spring.profiles.active=dev'
+
+# Build JAR
+./gradlew build
 ```
 
 ## Key Design Decisions
