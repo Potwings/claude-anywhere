@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="kr.yonggeon.claudebot.mapper.UserSessionMapper">
+
+    <resultMap id="UserSessionResultMap" type="UserSession">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="currentProjectId" column="current_project_id"/>
+        <result property="state" column="state"/>
+        <result property="stateData" column="state_data"/>
+        <result property="lastActivityAt" column="last_activity_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findByUserId" resultMap="UserSessionResultMap">
+        SELECT id, user_id, current_project_id, state, state_data, last_activity_at, created_at, updated_at
+        FROM user_session
+        WHERE user_id = #{userId}
+    </select>
+
+    <insert id="insert" parameterType="UserSession" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_session (user_id, current_project_id, state, state_data)
+        VALUES (#{userId}, #{currentProjectId}, #{state}, #{stateData})
+    </insert>
+
+    <update id="update" parameterType="UserSession">
+        UPDATE user_session
+        SET current_project_id = #{currentProjectId},
+            state = #{state},
+            state_data = #{stateData}
+        WHERE user_id = #{userId}
+    </update>
+
+    <update id="updateCurrentProject">
+        UPDATE user_session
+        SET current_project_id = #{projectId}
+        WHERE user_id = #{userId}
+    </update>
+
+    <update id="updateState">
+        UPDATE user_session
+        SET state = #{state},
+            state_data = #{stateData}
+        WHERE user_id = #{userId}
+    </update>
+
+    <delete id="deleteByUserId">
+        DELETE FROM user_session
+        WHERE user_id = #{userId}
+    </delete>
+
+</mapper>

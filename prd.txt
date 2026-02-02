@@ -1,0 +1,1265 @@
+# 텔레그램 봇 기반 Claude Code 프록시 PRD
+
+## 1. 제품 개요
+
+### 1.1 제품명
+Claude Code Telegram Bot
+
+### 1.2 목적
+텔레그램 메신저를 통해 집 PC(WSL2)의 Claude Code에 프롬프트를 전송하고, 실시간으로 코드 생성 과정을 모니터링하며, 결과를 확인할 수 있는 시스템
+
+### 1.3 핵심 가치
+- 제로 프론트엔드 개발 텔레그램 UI 그대로 사용
+- 즉시 사용 가능 봇 추가만 하면 바로 시작
+- 크로스 플랫폼 모바일, 데스크톱, 웹 모두 지원
+- 기본 제공 기능 활용 푸시 알림, 파일 공유, 대화 이력 무료
+
+### 1.4 OpenClaw 영감
+OpenClaw의 텔레그램 봇 방식을 벤치마킹하여 Claude Code를 대화형으로 제어
+
+---
+
+## 2. 사용자 시나리오
+
+### 2.1 핵심 시나리오
+
+#### 시나리오 1 출근길 지하철에서 프로젝트 시작
+```
+1. 텔레그램에서 봇 검색 후 start
+2. newproject blog-api 입력
+3. Spring Boot로 블로그 REST API 만들어줘 메시지 전송
+4. 실시간 로그 메시지 수신 (UserController.java 생성 중...)
+5. ✅ 작업 완료! 푸시 알림 받음
+6. [변경사항] 버튼 눌러서 생성된 파일 확인
+7. 회사 도착해서 PC에서 코드 확인
+```
+
+#### 시나리오 2 침대에서 코드 리뷰 후 수정 지시
+```
+1. PC에서 코드 리뷰 중 개선점 발견
+2. 침대로 이동
+3. 텔레그램 봇에 UserService 중복 코드 제거해줘 전송
+4. 침대에서 변경 내용 Diff로 확인
+5. 만족하면 commit 명령으로 커밋
+6. 다음날 PR 생성
+```
+
+#### 시나리오 3 카페에서 급한 버그 수정
+```
+1. 카페에서 버그 제보 받음
+2. 노트북 없이 텔레그램만으로 대응
+3. NullPointerException 버그 수정해줘. 
+    UserController 23번 라인 전송
+4. 수정 결과 확인
+5. push로 배포
+```
+
+---
+
+## 3. 기능 요구사항
+
+### 3.1 봇 명령어 (Commands)
+
+#### F-001 기본 명령어
+우선순위 P0
+
+ 명령어  설명  예시 
+--------------------
+ start  봇 시작 & 환영 메시지  `start` 
+ help  도움말 표시  `help` 
+ settings  설정 메뉴  `settings` 
+
+AC
+- [ ] start 시 환영 메시지 + 주요 명령어 안내
+- [ ] help 시 전체 명령어 목록 + 사용 예시
+- [ ] 명령어는 대소문자 구분 안 함
+
+---
+
+#### F-002 프로젝트 관리 명령어
+우선순위 P0
+
+ 명령어  설명  예시 
+--------------------
+ newproject  새 프로젝트 생성  `newproject blog-api` 
+ projects  프로젝트 목록 조회  `projects` 
+ select  프로젝트 선택 (컨텍스트 설정)  `select blog-api` 
+ current  현재 선택된 프로젝트 확인  `current` 
+ archive  프로젝트 아카이브  `archive blog-api` 
+ delete  프로젝트 삭제  `delete blog-api` 
+
+AC
+- [ ] newproject 시 workspace 디렉토리 생성 + Git 초기화
+- [ ] projects 시 인라인 키보드 버튼으로 프로젝트 선택 가능
+- [ ] select 후 프로젝트가 세션에 저장됨 (다음 프롬프트에 사용)
+- [ ] delete 시 확인 메시지 필수 (정말 삭제하시겠습니까 YES 입력)
+- [ ] 프로젝트명은 영문, 숫자, 하이픈(-), 언더스코어(_)만 허용
+
+---
+
+#### F-003 작업 실행 명령어
+우선순위 P0
+
+ 명령어  설명  예시 
+--------------------
+ (일반 메시지)  프롬프트로 인식하여 Claude Code 실행  `User API 만들어줘` 
+ status  현재 실행 중인 작업 상태  `status` 
+ cancel  실행 중인 작업 취소  `cancel` 
+ history  최근 작업 이력 (최대 10개)  `history` 
+ retry  마지막 실패한 작업 재시도  `retry` 
+
+AC
+- [ ] 프로젝트 선택 안 된 상태에서 일반 메시지 전송 시 경고
+- [ ] status 시 진행률 % 표시 (가능하면)
+- [ ] cancel 시 즉시 프로세스 kill
+- [ ] history 시 각 작업에 인라인 버튼 (상세, 재실행)
+
+---
+
+#### F-004 결과 확인 명령어
+우선순위 P0
+
+ 명령어  설명  예시 
+--------------------
+ changes  마지막 작업의 변경 파일 목록  `changes` 
+ diff  특정 파일의 Diff 보기  `diff UserController.java` 
+ show  파일 전체 내용 보기  `show UserEntity.java` 
+ download  변경된 파일 ZIP 다운로드  `download` 
+
+AC
+- [ ] changes 시 생성수정삭제 파일을 이모지로 구분 표시
+- [ ] diff 시 텔레그램 코드 블록 (```diff) 형식으로 전송
+- [ ] show 시 syntax highlighting (```java)
+- [ ] download 시 .zip 파일로 텔레그램 파일 전송
+- [ ] 파일이 너무 크면 (5MB+) 분할 전송 또는 외부 링크
+
+---
+
+#### F-005 Git 연동 명령어
+우선순위 P1
+
+ 명령어  설명  예시 
+--------------------
+ commit  Git commit  `commit User API 추가` 
+ auto_commit  자동 커밋 메시지 생성  `auto_commit` 
+ push  Git push  `push` 
+ branch  브랜치 생성변경  `branch featureuser-api` 
+ git_status  Git status 확인  `git_status` 
+
+AC
+- [ ] commit 시 메시지 없으면 입력 요청
+- [ ] auto_commit 시 변경 내용 기반으로 AI 커밋 메시지 생성
+- [ ] push 시 remote 설정 안 되어 있으면 안내 메시지
+- [ ] git_status 시 현재 브랜치, 변경 파일 수 표시
+
+---
+
+### 3.2 인터랙티브 버튼 (Inline Keyboard)
+
+#### F-006 작업 완료 시 액션 버튼
+우선순위 P0
+
+버튼 구성
+```
+[📄 변경사항] [⬇️ 다운로드]
+[💾 커밋] [▶️ 계속 작업]
+```
+
+AC
+- [ ] [변경사항] changes 자동 실행
+- [ ] [다운로드] download 자동 실행
+- [ ] [커밋] 커밋 메시지 입력 프롬프트 표시
+- [ ] [계속 작업] 입력창 포커스 (추가 프롬프트 대기)
+
+---
+
+#### F-007 프로젝트 목록 선택 버튼
+우선순위 P0
+
+예시
+```
+📁 프로젝트 목록
+
+[blog-api] 2시간 전
+[ecommerce] 1일 전
+[chatbot] 3일 전
+
+[+ 새 프로젝트]
+```
+
+AC
+- [ ] 각 프로젝트 버튼 클릭 시 자동 선택 + 작업 시작 안내
+- [ ] 최대 10개 프로젝트 표시 (더 많으면 페이징)
+- [ ] [+ 새 프로젝트] 버튼 클릭 시 프로젝트명 입력 요청
+
+---
+
+#### F-008 파일 목록 선택 버튼
+우선순위 P1
+
+예시
+```
+✅ 생성된 파일
+
+[UserController.java]
+[UserService.java]
+[UserEntity.java]
+[UserRepository.java]
+
+상세히 볼 파일을 선택하세요.
+```
+
+AC
+- [ ] 각 파일 버튼 클릭 시 show 자동 실행
+- [ ] 파일이 10개 이상이면 더보기 버튼
+
+---
+
+### 3.3 실시간 로그 스트리밍
+
+#### F-009 Claude Code 실행 로그 전송
+우선순위 P1
+
+동작
+```
+사용자 User API 만들어줘
+
+봇 ⚙️ 작업 시작...
+    📁 프로젝트 blog-api
+    🆔 작업 ID #1234
+
+봇 📝 143005 프로젝트 분석 중...
+봇 📝 143010 UserController.java 생성 중...
+봇 📝 143015 UserService.java 생성 중...
+봇 📝 143020 코드 포맷팅 적용...
+
+봇 ✅ 작업 완료! (30초 소요)
+    [버튼들...]
+```
+
+AC
+- [ ] 로그는 개별 메시지로 전송 (메시지 수정 방식도 고려)
+- [ ] 로그 레벨 이모지로 구분 (📝 INFO, ⚠️ WARN, ❌ ERROR)
+- [ ] 너무 많은 로그는 요약 (예 파일 10개 생성 중...)
+- [ ] 실패 시 에러 메시지 명확히 표시
+
+---
+
+### 3.4 파일 전송
+
+#### F-010 변경된 파일 ZIP 다운로드
+우선순위 P1
+
+AC
+- [ ] 모든 변경 파일을 .zip으로 압축
+- [ ] 파일명 `{project_name}_changes_{task_id}.zip`
+- [ ] 텔레그램 Document 타입으로 전송
+- [ ] 50MB 초과 시 압축 레벨 조정 또는 분할
+
+---
+
+#### F-011 개별 파일 전송
+우선순위 P2
+
+AC
+- [ ] 특정 파일만 선택적으로 전송 가능
+- [ ] 코드 파일은 텍스트로 전송 (복사 용이)
+- [ ] 이미지바이너리는 Document로 전송
+
+---
+
+### 3.5 알림 (Notification)
+
+#### F-012 작업 완료실패 알림
+우선순위 P0
+
+알림 시나리오
+- 작업 완료 ✅ User API 생성 완료! 4개 파일 생성됨
+- 작업 실패 ❌ 작업 실패 SyntaxError in UserController.java
+- 작업 취소 🚫 작업이 취소되었습니다
+
+AC
+- [ ] 텔레그램 푸시 알림 자동 전송 (봇 메시지가 곧 알림)
+- [ ] 사용자가 봇과 대화 중이면 즉시 메시지
+- [ ] 대화 안 하고 있으면 푸시 알림만
+
+---
+
+#### F-013 주기적 상태 업데이트
+우선순위 P2
+
+AC
+- [ ] 장시간(5분+) 실행되는 작업은 1분마다 진행 상황 전송
+- [ ] ⚙️ 작업 진행 중... (3분 경과, 파일 8개 생성)
+
+---
+
+### 3.6 사용자 설정
+
+#### F-014 개인 설정 관리
+우선순위 P1
+
+설정 항목
+- 작업 타임아웃 (기본 10분, 최대 30분)
+- 자동 커밋 여부 (기본 false)
+- 로그 상세도 (간략상세)
+- 알림 수신 여부
+
+UI
+```
+⚙️ 설정
+
+[작업 타임아웃 10분 ▼]
+[자동 커밋 OFF ▼]
+[로그 상세 ▼]
+[알림 ON ▼]
+```
+
+AC
+- [ ] 각 항목 클릭 시 옵션 선택 인라인 키보드 표시
+- [ ] 설정 변경 즉시 DB 저장
+- [ ] 기본값 복원 버튼
+
+---
+
+### 3.7 멀티 유저 지원
+
+#### F-015 사용자 인증
+우선순위 P0
+
+AC
+- [ ] 텔레그램 User ID를 고유 식별자로 사용
+- [ ] 최초 start 시 자동 회원가입 (별도 가입 절차 없음)
+- [ ] user 테이블에 telegram_user_id, username, first_name 저장
+
+---
+
+#### F-016 사용자별 격리
+우선순위 P0
+
+AC
+- [ ] 각 사용자는 자기 프로젝트만 조회수정 가능
+- [ ] workspace 경로 `homepotwingsworkspace{telegram_user_id}{project_name}`
+- [ ] DB 쿼리에 항상 user_id 조건 포함
+
+---
+
+### 3.8 에러 처리
+
+#### F-017 친절한 에러 메시지
+우선순위 P0
+
+에러 시나리오별 메시지
+
+ 에러  메시지 
+--------------
+ 프로젝트 미선택  ⚠️ 먼저 프로젝트를 선택해주세요. projects 
+ 프로젝트명 중복  ⚠️ 같은 이름의 프로젝트가 이미 있어요. 다른 이름을 사용해주세요. 
+ Claude Code 타임아웃  ⏱️ 작업이 너무 오래 걸려서 중단했어요. retry로 재시도하거나 더 간단한 요청으로 나눠보세요. 
+ 디스크 용량 부족  💾 디스크 공간이 부족합니다. 불필요한 프로젝트를 삭제해주세요. 
+ WSL2 서버 다운  🔴 서버 연결이 끊어졌어요. 잠시 후 다시 시도해주세요. 
+
+AC
+- [ ] 모든 에러에 이모지 + 해결 방법 포함
+- [ ] 기술적 에러 스택은 숨기고 사용자 친화적 메시지만 표시
+- [ ] 심각한 에러는 관리자에게 별도 알림
+
+---
+
+## 4. 비기능 요구사항
+
+### 4.1 성능
+
+#### NF-001 응답 시간
+- 명령어 처리  1초
+- 작업 시작 응답  2초
+- 로그 메시지 전송  500ms
+- 파일 다운로드 준비  5초
+
+#### NF-002 동시 처리
+- 사용자별 동시 최대 1개 작업 (순차 처리)
+- 여러 사용자 동시 사용 가능 (최대 5명)
+- 대기열 최대 3개 작업
+
+---
+
+### 4.2 보안
+
+#### NF-003 봇 토큰 보안
+- 환경변수 또는 secrets 파일로 관리
+- GitHub에 절대 커밋 금지
+- 주기적 토큰 갱신 권장
+
+#### NF-004 사용자 권한
+- Telegram User ID 기반 인증
+- 다른 사용자 프로젝트 접근 차단
+- 파일 시스템 접근 제한 (workspace 내부만)
+
+#### NF-005 명령 인젝션 방지
+- 프로젝트명, 파일명에 특수문자 필터링
+- Git 명령어 파라미터 sanitize
+- Shell 명령어 직접 실행 금지 (허용 목록 방식)
+
+---
+
+### 4.3 안정성
+
+#### NF-006 장애 복구
+- WSL2 서버 다운 시 자동 재시작
+- 작업 진행 중 봇 재시작 시 상태 복구
+- 실패한 작업 자동 재시도 옵션
+
+#### NF-007 로깅
+- 모든 명령어 실행 로그 기록
+- 에러 발생 시 스택 트레이스 파일 저장
+- 일일 사용 통계 (명령어별, 사용자별)
+
+---
+
+### 4.4 사용성
+
+#### NF-008 텔레그램 UX 최적화
+- 긴 메시지는 여러 메시지로 분할 (4096자 제한)
+- 코드 블록은 ```언어명 형식 사용
+- 인라인 키보드 적극 활용
+- 이모지로 가독성 향상
+
+#### NF-009 오프라인 지원
+- 텔레그램 자체가 오프라인 메시지 큐잉 지원
+- 서버 복구 후 대기 중인 명령어 순차 처리
+
+---
+
+## 5. 기술 스택
+
+### 5.1 백엔드 (WSL2 Ubuntu)
+
+```yaml
+Framework: Spring Boot 3.5.9
+Language: Java 21 LTS
+Database: MySQL 8.0
+ORM: MyBatis 3.5.19 + MyBatis Spring Boot Starter 3.0.4
+Telegram API: TelegramBots 9.2.1 (Long Polling Starter)
+Process Management: ProcessBuilder + Virtual Threads
+Version Control: JGit 6.10+
+Connection Pool: HikariCP (Spring Boot 기본 내장)
+JSON Processing: Jackson 2.17+
+Logging: SLF4J + Logback
+```
+
+### 5.2 의존성 설정 (Maven)
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.9</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.potwings</groupId>
+    <artifactId>claude-code-telegram-bot</artifactId>
+    <version>1.0.0</version>
+    <name>Claude Code Telegram Bot</name>
+
+    <properties>
+        <java.version>21</java.version>
+        <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
+        <telegrambots.version>9.2.1</telegrambots.version>
+        <jgit.version>6.10.0.202406032230-r</jgit.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Starters -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- MyBatis -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>${mybatis-spring-boot.version}</version>
+        </dependency>
+
+        <!-- Telegram Bots -->
+        <dependency>
+            <groupId>org.telegram</groupId>
+            <artifactId>telegrambots-springboot-longpolling-starter</artifactId>
+            <version>${telegrambots.version}</version>
+        </dependency>
+
+        <!-- Database -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- JGit for Git operations -->
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+            <version>${jgit.version}</version>
+        </dependency>
+
+        <!-- Utilities -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter-test</artifactId>
+            <version>${mybatis-spring-boot.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+### 5.3 인프라
+
+```yaml
+OS: WSL2 Ubuntu 24.04 LTS
+Bot Hosting: WSL2 (Long Polling 방식)
+Network: Tailscale VPN (선택, 외부 접속용)
+Reverse Proxy: 불필요 (텔레그램 API 직접 통신)
+Process Supervisor: systemd (자동 재시작)
+Monitoring: Spring Boot Actuator + Prometheus (선택)
+```
+
+### 5.4 애플리케이션 설정 (application.yml)
+
+```yaml
+spring:
+  application:
+    name: claude-code-telegram-bot
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/claude_bot?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  threads:
+    virtual:
+      enabled: true  # Java 21 Virtual Threads 활성화
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.potwings.claudebot.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    default-statement-timeout: 30
+
+telegram:
+  bot:
+    token: ${TELEGRAM_BOT_TOKEN}
+    username: ${TELEGRAM_BOT_USERNAME}
+
+claude:
+  workspace:
+    base-path: /home/potwings/workspace
+  timeout:
+    default-minutes: 10
+    max-minutes: 30
+
+logging:
+  level:
+    com.potwings.claudebot: DEBUG
+    org.telegram: INFO
+  file:
+    name: logs/claude-bot.log
+    max-size: 10MB
+    max-history: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+```
+
+### 5.5 프로젝트 구조
+
+```
+claude-code-telegram-bot/
+├── src/
+│   ├── main/
+│   │   ├── java/com/potwings/claudebot/
+│   │   │   ├── ClaudeCodeTelegramBotApplication.java
+│   │   │   ├── config/
+│   │   │   │   ├── TelegramBotConfig.java
+│   │   │   │   ├── AsyncConfig.java
+│   │   │   │   └── SecurityConfig.java
+│   │   │   ├── bot/
+│   │   │   │   ├── ClaudeCodeBot.java
+│   │   │   │   ├── command/
+│   │   │   │   │   ├── CommandRouter.java
+│   │   │   │   │   ├── StartCommand.java
+│   │   │   │   │   ├── HelpCommand.java
+│   │   │   │   │   ├── ProjectCommand.java
+│   │   │   │   │   └── GitCommand.java
+│   │   │   │   ├── callback/
+│   │   │   │   │   └── CallbackHandler.java
+│   │   │   │   └── keyboard/
+│   │   │   │       └── InlineKeyboardFactory.java
+│   │   │   ├── service/
+│   │   │   │   ├── UserService.java
+│   │   │   │   ├── ProjectService.java
+│   │   │   │   ├── TaskService.java
+│   │   │   │   ├── SessionService.java
+│   │   │   │   ├── ClaudeCodeService.java
+│   │   │   │   ├── GitService.java
+│   │   │   │   ├── FileService.java
+│   │   │   │   └── NotificationService.java
+│   │   │   ├── domain/
+│   │   │   │   ├── User.java
+│   │   │   │   ├── Project.java
+│   │   │   │   ├── Task.java
+│   │   │   │   ├── FileChange.java
+│   │   │   │   ├── UserSession.java
+│   │   │   │   └── UserSettings.java
+│   │   │   ├── mapper/
+│   │   │   │   ├── UserMapper.java
+│   │   │   │   ├── ProjectMapper.java
+│   │   │   │   ├── TaskMapper.java
+│   │   │   │   └── FileChangeMapper.java
+│   │   │   ├── dto/
+│   │   │   │   ├── request/
+│   │   │   │   └── response/
+│   │   │   ├── exception/
+│   │   │   │   ├── BotException.java
+│   │   │   │   ├── ProjectNotFoundException.java
+│   │   │   │   └── GlobalExceptionHandler.java
+│   │   │   └── util/
+│   │   │       ├── MessageFormatter.java
+│   │   │       ├── CommandParser.java
+│   │   │       └── FileUtils.java
+│   │   └── resources/
+│   │       ├── application.yml
+│   │       ├── application-dev.yml
+│   │       ├── application-prod.yml
+│   │       ├── mapper/
+│   │       │   ├── UserMapper.xml
+│   │       │   ├── ProjectMapper.xml
+│   │       │   └── TaskMapper.xml
+│   │       └── messages/
+│   │           ├── messages_ko.properties
+│   │           └── messages_en.properties
+│   └── test/
+│       └── java/com/potwings/claudebot/
+│           ├── service/
+│           └── bot/
+├── logs/
+├── pom.xml
+├── Dockerfile
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## 6. 데이터베이스 스키마
+
+### 6.1 핵심 테이블
+
+```sql
+-- User
+CREATE TABLE user (
+    user_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    telegram_user_id BIGINT NOT NULL UNIQUE,
+    username VARCHAR(255),
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_active_at DATETIME,
+    INDEX idx_telegram_user_id (telegram_user_id)
+);
+
+-- Project
+CREATE TABLE project (
+    project_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    project_name VARCHAR(255) NOT NULL,
+    workspace_path VARCHAR(500) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES user(user_id),
+    UNIQUE KEY uk_user_project (user_id, project_name),
+    INDEX idx_user_active (user_id, is_archived)
+);
+
+-- Task
+CREATE TABLE task (
+    task_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    task_uuid VARCHAR(36) NOT NULL UNIQUE,
+    prompt TEXT NOT NULL,
+    status ENUM('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED') NOT NULL,
+    queued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    completed_at DATETIME,
+    duration_seconds INT,
+    error_message TEXT,
+    files_created INT DEFAULT 0,
+    files_modified INT DEFAULT 0,
+    files_deleted INT DEFAULT 0,
+    total_lines INT DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES user(user_id),
+    FOREIGN KEY (project_id) REFERENCES project(project_id),
+    INDEX idx_user_task (user_id, status),
+    INDEX idx_project_task (project_id)
+);
+
+-- File_Change
+CREATE TABLE file_change (
+    change_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id BIGINT NOT NULL,
+    file_path VARCHAR(1000) NOT NULL,
+    change_type ENUM('CREATED', 'MODIFIED', 'DELETED') NOT NULL,
+    lines_added INT DEFAULT 0,
+    lines_removed INT DEFAULT 0,
+    diff_content MEDIUMTEXT,
+    file_content MEDIUMTEXT,
+    FOREIGN KEY (task_id) REFERENCES task(task_id),
+    INDEX idx_task_changes (task_id)
+);
+
+-- User_Session (현재 선택된 프로젝트 추적)
+CREATE TABLE user_session (
+    session_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE,
+    current_project_id BIGINT,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user(user_id),
+    FOREIGN KEY (current_project_id) REFERENCES project(project_id)
+);
+
+-- User_Settings
+CREATE TABLE user_settings (
+    settings_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE,
+    task_timeout_minutes INT DEFAULT 10,
+    auto_commit BOOLEAN DEFAULT FALSE,
+    log_level ENUM('brief', 'verbose') DEFAULT 'brief',
+    notification_enabled BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (user_id) REFERENCES user(user_id)
+);
+```
+
+---
+
+## 7. API 흐름도
+
+### 7.1 명령어 처리 흐름
+
+```
+[텔레그램 사용자]
+    ↓ 메시지 전송
+[Telegram API]
+    ↓ Webhook or Long Polling
+[Spring Boot - TelegramBot Handler]
+    ↓ 명령어 파싱
+[CommandRouter]
+    ├─ newproject → ProjectService
+    ├─ select → SessionService
+    ├─ 일반 메시지 → ClaudeCodeService
+    └─ commit → GitService
+    ↓
+[Service Layer 실행]
+    ↓
+[텔레그램 응답 전송]
+    ↓
+[사용자에게 메시지 도착]
+```
+
+### 7.2 프롬프트 실행 흐름
+
+```
+[사용자] User API 만들어줘
+    ↓
+[BotHandler] 
+    - 프로젝트 선택 확인
+    - Task 생성 (QUEUED)
+    ↓
+[ClaudeCodeService]
+    - ⚙️ 작업 시작... 메시지 전송
+    - ExecutorService로 비동기 실행
+    ↓
+[ProcessBuilder]
+    - Claude Code CLI 실행
+    - stdout 스트림 읽기
+    ↓
+[LogStreamHandler]
+    - 각 로그 라인마다 텔레그램 메시지 전송
+    ↓
+[Task 완료]
+    - file_change 테이블 저장
+    - ✅ 작업 완료! 메시지 + 인라인 버튼
+```
+
+---
+
+## 8. 개발 우선순위
+
+### Phase 1 기본 봇 구축 (3일)
+- [ ] F-001 기본 명령어 (start, help)
+- [ ] F-002 프로젝트 관리 (newproject, projects, select)
+- [ ] F-015 사용자 인증 (Telegram ID)
+- [ ] DB 스키마 생성
+
+### Phase 2 코어 기능 (3일)
+- [ ] F-003 프롬프트 실행 (일반 메시지 → Claude Code)
+- [ ] F-009 실시간 로그 스트리밍
+- [ ] F-004 결과 확인 (changes, diff)
+- [ ] F-006 작업 완료 인라인 버튼
+
+### Phase 3 Git 연동 (2일)
+- [ ] F-005 Git 명령어 (commit, push, git_status)
+- [ ] auto_commit (AI 커밋 메시지 생성)
+
+### Phase 4 편의 기능 (2일)
+- [ ] F-007 프로젝트 목록 인라인 버튼
+- [ ] F-010 ZIP 다운로드
+- [ ] F-014 사용자 설정
+- [ ] F-013 주기적 상태 업데이트
+
+### Phase 5 폴리싱 (1일)
+- [ ] F-017 친절한 에러 메시지
+- [ ] 이모지 최적화
+- [ ] 메시지 포맷팅 개선
+- [ ] 도움말 문서 작성
+
+총 개발 기간 약 11일 (2주 이내)
+
+---
+
+## 9. 성공 지표 (KPI)
+
+### 9.1 사용성
+- 목표 첫 프롬프트 전송까지  1분
+- 측정 start → newproject → 첫 메시지
+
+### 9.2 성능
+- 목표 작업 성공률  90%
+- 측정 COMPLETED  (COMPLETED + FAILED)
+
+### 9.3 만족도
+- 목표 일주일 후에도 계속 사용
+- 측정 Daily Active Users (DAU)
+
+---
+
+## 10. 리스크 & 대응
+
+ 리스크  영향  확률  대응 방안 
+-------------------------------
+ 텔레그램 API 제한 (초당 30msg)  중간  낮음  메시지 큐잉 + 병합 전송 
+ Claude Code 긴 실행 시간  높음  높음  타임아웃 설정 + 주기 업데이트 
+ WSL2 서버 다운  높음  중간  Health Check + 자동 재시작 
+ 텔레그램 메시지 크기 제한 (4096자)  낮음  높음  자동 분할 전송 
+ 여러 사용자 동시 작업 시 리소스  중간  낮음  큐 관리 + 동시 작업 제한 
+
+---
+
+## 11. 커스텀 앱 vs 텔레그램 봇 비교
+
+ 항목  커스텀 모바일 앱  텔레그램 봇 
+------------------------------------
+ 개발 기간  5주  2주 
+ 프론트엔드 개발  필요 (Android + iOS)  불필요 ✅ 
+ 푸시 알림  FCM 구현 필요  기본 제공 ✅ 
+ 크로스 플랫폼  각각 개발  자동 지원 ✅ 
+ 대화 이력  DB + UI 구현  텔레그램 자체 ✅ 
+ 파일 공유  업로드 구현  기본 제공 ✅ 
+ 인증  JWT 구현  Telegram ID ✅ 
+ UI 커스터마이징  자유로움  제한적 ⚠️ 
+ 앱 배포  스토어 심사 필요  즉시 사용 ✅ 
+ 유지보수  복잡  간단 ✅ 
+
+결론 텔레그램 봇이 압도적으로 유리합니다!
+
+---
+
+---
+
+## 12. 핵심 코드 샘플
+
+### 12.1 TelegramBot 메인 클래스
+
+```java
+package com.potwings.claudebot.bot;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
+import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.meta.generics.TelegramClient;
+
+import java.util.List;
+
+@Component
+public class ClaudeCodeBot implements LongPollingUpdateConsumer {
+
+    private final TelegramClient telegramClient;
+    private final CommandRouter commandRouter;
+
+    public ClaudeCodeBot(
+            @Value("${telegram.bot.token}") String botToken,
+            CommandRouter commandRouter) {
+        this.telegramClient = new OkHttpTelegramClient(botToken);
+        this.commandRouter = commandRouter;
+    }
+
+    @Override
+    public void consume(List<Update> updates) {
+        updates.forEach(this::processUpdate);
+    }
+
+    private void processUpdate(Update update) {
+        if (update.hasMessage() && update.getMessage().hasText()) {
+            commandRouter.route(update, telegramClient);
+        } else if (update.hasCallbackQuery()) {
+            commandRouter.handleCallback(update.getCallbackQuery(), telegramClient);
+        }
+    }
+
+    public void sendMessage(Long chatId, String text) {
+        SendMessage message = SendMessage.builder()
+                .chatId(chatId)
+                .text(text)
+                .parseMode("Markdown")
+                .build();
+        try {
+            telegramClient.execute(message);
+        } catch (TelegramApiException e) {
+            // 에러 처리
+        }
+    }
+}
+```
+
+### 12.2 Claude Code 실행 서비스 (Virtual Threads 활용)
+
+```java
+package com.potwings.claudebot.service;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ClaudeCodeService {
+
+    @Value("${claude.workspace.base-path}")
+    private String workspaceBasePath;
+
+    @Value("${claude.timeout.default-minutes}")
+    private int defaultTimeoutMinutes;
+
+    // Java 21 Virtual Threads 사용
+    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+    public CompletableFuture<TaskResult> executePrompt(
+            String projectPath,
+            String prompt,
+            Consumer<String> logCallback) {
+
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(
+                        "claude",
+                        "--dangerously-skip-permissions",
+                        "-p", prompt
+                );
+                pb.directory(Path.of(workspaceBasePath, projectPath).toFile());
+                pb.redirectErrorStream(true);
+
+                Process process = pb.start();
+
+                // 실시간 로그 스트리밍
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        logCallback.accept(line);
+                    }
+                }
+
+                int exitCode = process.waitFor();
+                return new TaskResult(exitCode == 0, exitCode);
+
+            } catch (Exception e) {
+                log.error("Claude Code 실행 실패", e);
+                return new TaskResult(false, -1, e.getMessage());
+            }
+        }, executor);
+    }
+
+    public record TaskResult(boolean success, int exitCode, String errorMessage) {
+        public TaskResult(boolean success, int exitCode) {
+            this(success, exitCode, null);
+        }
+    }
+}
+```
+
+### 12.3 인라인 키보드 팩토리
+
+```java
+package com.potwings.claudebot.bot.keyboard;
+
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class InlineKeyboardFactory {
+
+    public static InlineKeyboardMarkup taskCompleteKeyboard(Long taskId) {
+        return InlineKeyboardMarkup.builder()
+                .keyboardRow(new InlineKeyboardRow(
+                        InlineKeyboardButton.builder()
+                                .text("📄 변경사항")
+                                .callbackData("changes:" + taskId)
+                                .build(),
+                        InlineKeyboardButton.builder()
+                                .text("⬇️ 다운로드")
+                                .callbackData("download:" + taskId)
+                                .build()
+                ))
+                .keyboardRow(new InlineKeyboardRow(
+                        InlineKeyboardButton.builder()
+                                .text("💾 커밋")
+                                .callbackData("commit:" + taskId)
+                                .build(),
+                        InlineKeyboardButton.builder()
+                                .text("▶️ 계속 작업")
+                                .callbackData("continue:" + taskId)
+                                .build()
+                ))
+                .build();
+    }
+
+    public static InlineKeyboardMarkup projectListKeyboard(List<Project> projects) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+
+        for (Project project : projects) {
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder()
+                            .text("📁 " + project.getProjectName())
+                            .callbackData("select:" + project.getProjectId())
+                            .build()
+            ));
+        }
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder()
+                        .text("➕ 새 프로젝트")
+                        .callbackData("newproject")
+                        .build()
+        ));
+
+        return InlineKeyboardMarkup.builder()
+                .keyboard(rows)
+                .build();
+    }
+}
+```
+
+---
+
+## 13. 추가 개선 사항
+
+### 13.1 성능 최적화
+
+| 항목 | 개선 내용 |
+|------|----------|
+| Virtual Threads | Java 21 Virtual Threads로 동시 요청 처리 효율 극대화 |
+| 메시지 배치 전송 | 짧은 간격의 로그를 모아서 전송 (Rate Limit 회피) |
+| 커넥션 풀링 | HikariCP 최적화 설정 |
+| 캐싱 | 사용자 세션 및 프로젝트 정보 메모리 캐싱 |
+
+### 13.2 보안 강화
+
+| 항목 | 구현 방안 |
+|------|----------|
+| 토큰 관리 | 환경변수 + Spring @Value 주입 |
+| 입력 검증 | Bean Validation (@Valid, @Pattern) |
+| 명령 인젝션 방지 | 화이트리스트 방식 + ProcessBuilder 사용 |
+| 파일 경로 검증 | Path Traversal 공격 방지 |
+| Rate Limiting | 사용자별 분당 요청 수 제한 |
+
+### 13.3 운영 편의
+
+| 항목 | 구현 방안 |
+|------|----------|
+| Health Check | Spring Actuator `/health` 엔드포인트 |
+| 로그 관리 | Logback 파일 롤링 + 30일 보관 |
+| 자동 재시작 | systemd 서비스 등록 |
+| 모니터링 | Actuator 메트릭 + Prometheus (선택) |
+
+### 13.4 다국어 지원
+
+```properties
+# messages_ko.properties
+bot.welcome=👋 안녕하세요! Claude Code Bot입니다.
+bot.help=사용 가능한 명령어 목록입니다.
+bot.project.select=프로젝트를 선택해주세요.
+bot.task.started=⚙️ 작업을 시작합니다...
+bot.task.completed=✅ 작업이 완료되었습니다!
+bot.error.no_project=⚠️ 먼저 프로젝트를 선택해주세요.
+```
+
+---
+
+## 14. Docker 배포 설정
+
+### 14.1 Dockerfile
+
+```dockerfile
+FROM eclipse-temurin:21-jre-alpine
+
+WORKDIR /app
+
+COPY target/claude-code-telegram-bot-*.jar app.jar
+
+ENV JAVA_OPTS="-XX:+UseZGC -XX:+ZGenerational -Xmx512m"
+
+EXPOSE 8080
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+```
+
+### 14.2 docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  claude-bot:
+    build: .
+    container_name: claude-code-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SPRING_PROFILES_ACTIVE=prod
+    volumes:
+      - /home/potwings/workspace:/home/potwings/workspace
+      - ./logs:/app/logs
+    depends_on:
+      - mysql
+    networks:
+      - claude-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: claude-bot-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=claude_bot
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - claude-network
+
+volumes:
+  mysql-data:
+
+networks:
+  claude-network:
+    driver: bridge
+```
+
+---
+
+## 15. 개발 일정 (수정)
+
+| Phase | 내용 | 예상 기간 |
+|-------|------|----------|
+| **Phase 1** | 프로젝트 셋업 + 기본 봇 (start, help, 프로젝트 관리) | 2일 |
+| **Phase 2** | Claude Code 연동 + 실시간 로그 스트리밍 | 3일 |
+| **Phase 3** | 결과 확인 (changes, diff, download) + 인라인 버튼 | 2일 |
+| **Phase 4** | Git 연동 (commit, push, branch) | 2일 |
+| **Phase 5** | 사용자 설정 + 에러 처리 + 폴리싱 | 2일 |
+| **총계** | | **11일** |
+
+---
+
+이 PRD로 진행하시겠어요
