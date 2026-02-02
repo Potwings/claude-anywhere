@@ -107,3 +107,27 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
 2. **Soft Delete**: Projects use status (ACTIVE/ARCHIVED/DELETED) instead of hard delete
 3. **Auto-select**: New projects are automatically selected after creation
 4. **Session Management**: Each user has a session tracking current project and conversation state
+
+## Git Workflow
+**master 브랜치에 직접 커밋하지 않고, 반드시 PR을 통해 merge합니다.**
+
+```bash
+# 1. feature 브랜치 생성
+git checkout -b feature/작업명
+
+# 2. 작업 & 커밋
+git add 파일들
+git commit -m "커밋 메시지"
+
+# 3. 브랜치 push
+git push -u origin feature/작업명
+
+# 4. PR 생성 (gh CLI 사용)
+gh pr create --title "PR 제목" --body "PR 설명"
+```
+
+### Branch Naming Convention
+- `feature/기능명` - 새 기능 개발
+- `fix/버그명` - 버그 수정
+- `refactor/대상` - 리팩토링
+- `docs/문서명` - 문서 작업
