@@ -157,6 +157,29 @@ const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN, {
   handlerTimeout: Infinity,
 });
 
+// 허용된 Telegram 유저 ID (쉼표 구분)
+const adminIds = new Set(
+  (process.env.TELEGRAM_ADMIN_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map(Number)
+);
+
+if (adminIds.size > 0) {
+  log("bot", `Admin whitelist: ${[...adminIds].join(", ")}`);
+  bot.use((ctx, next) => {
+    const userId = ctx.from?.id;
+    if (!userId || !adminIds.has(userId)) {
+      log("bot", `Blocked user ${userId}`);
+      return;
+    }
+    return next();
+  });
+} else {
+  log("bot", "No TELEGRAM_ADMIN_IDS set — all users allowed");
+}
+
 // 현재 활성 세션 (메모리)
 const activeSessionIds = new Map<number, string>();
 const userWorkDirs = new Map<number, string>();
