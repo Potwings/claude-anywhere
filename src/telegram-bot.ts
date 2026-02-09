@@ -31,7 +31,7 @@ type SessionRecord = {
   prompt: string;
   cwd: string;
   createdAt: string;
-  status: "running" | "done" | "error";
+  status: "running" | "done" | "error" | "cancelled";
 };
 
 type SessionStore = {
@@ -44,7 +44,8 @@ function loadSessions(): SessionStore {
   if (!existsSync(SESSION_FILE)) return {};
   try {
     return JSON.parse(readFileSync(SESSION_FILE, "utf-8"));
-  } catch {
+  } catch (error) {
+    console.error(`Failed to load sessions from ${SESSION_FILE}:`, error);
     return {};
   }
 }
@@ -231,13 +232,25 @@ bot.command("reset", (ctx) => {
 
 bot.command("cancel", async (ctx) => {
   const running = runningQueries.get(ctx.from.id);
-  if (running) {
-    await running.interrupt();
-    runningQueries.delete(ctx.from.id);
-    ctx.reply("Task cancelled.");
-  } else {
+  if (!running) {
     ctx.reply("No running task.");
+    return;
   }
+
+  const sessionId = activeSessionIds.get(ctx.from.id);
+  try {
+    await running.interrupt();
+  } catch (error) {
+    console.error(`Failed to interrupt query for user ${ctx.from.id}:`, error);
+    if (sessionId) updateSessionStatus(ctx.from.id, sessionId, "error");
+    runningQueries.delete(ctx.from.id);
+    ctx.reply("Cancel failed, but task has been cleaned up.");
+    return;
+  }
+
+  if (sessionId) updateSessionStatus(ctx.from.id, sessionId, "cancelled");
+  runningQueries.delete(ctx.from.id);
+  ctx.reply("Task cancelled.");
 });
 
 // /sessions - 이전 세션 목록
