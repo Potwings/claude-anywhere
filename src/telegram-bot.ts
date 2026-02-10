@@ -332,6 +332,8 @@ bot.on("text", async (ctx) => {
   const statusMsg = await ctx.reply("Processing...");
   const handlerStart = Date.now();
 
+  let newSessionId: string | undefined;
+
   try {
     const sessionId = activeSessionIds.get(userId);
 
@@ -352,7 +354,6 @@ bot.on("text", async (ctx) => {
     runningQueries.set(userId, q);
 
     let resultText = "";
-    let newSessionId: string | undefined;
     let msgCount = 0;
 
     for await (const message of q) {
@@ -425,6 +426,13 @@ bot.on("text", async (ctx) => {
     const detail = `[${errName}] ${errMsg} (elapsed=${elapsed}ms)`;
     logError("catch", `${detail}\n${errStack}`);
     await sendLog(ctx, `Error:\n${detail}`);
+    if (newSessionId) {
+      try {
+        updateSessionStatus(userId, newSessionId, "error");
+      } catch (statusErr: any) {
+        logError("catch", `Failed to update session status: ${statusErr.message}`);
+      }
+    }
   } finally {
     runningQueries.delete(userId);
     log("handler", `done user=${userId} total=${Date.now() - handlerStart}ms`);
